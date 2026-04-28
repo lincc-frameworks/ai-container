@@ -7,7 +7,7 @@ This sub-project builds an Apptainer image intended for USDF/S3DF Rubin develope
 - **Fast shell entry**: image + tools are built ahead-of-time; runtime work is mostly bind mounts.
 - **Persistent writable state**: a local writable Apptainer overlay (`container/build/overlay.img`) is used so package installs survive across sessions.
 - **Safety for shared Rubin state**: `/sdf/group/rubin` and `/sdf/data/rubin` are bind-mounted read-only.
-- **Controlled host communication**: `$HOME/rubin-user/container-shared` is bind-mounted RW by default.
+- **Home isolation by default**: launcher uses `--no-home`, then re-binds only approved paths.
 - **Credential updates without rebuilds**: auth files and selected env vars are passed at startup.
 
 ## Files
@@ -80,6 +80,17 @@ Auth/token directories are mounted when present:
 - `~/.config/claude` (RW)
 - `~/.pi` (RW)
 - `~/.lsst` (RO)
+
+Additional bind policy in `scripts/run.sh`:
+
+- Host home directory is not mounted (`--no-home`) to block writes via symlink traversal.
+- `~/rubin-user` is resolved to its canonical host path and then bound RW to `~/rubin-user` in-container.
+- Shared Rubin trees (`/sdf/group/rubin`, `/sdf/data/rubin`) remain mounted RO.
+- Mounts are organized as a three-tier policy in one place:
+  - Tier 1 (RW): user-owned work + agent/auth state (`~/rubin-user`, `~/.codex`, `~/.config/claude`, `~/.pi`).
+  - Tier 2 (RO): shared Rubin trees.
+  - Tier 3 (none): everything else is not mounted unless explicitly listed.
+- All Tier 1/Tier 2 bind entries go through the same conditional source-exists processing before being passed to `apptainer`.
 
 ### Codex OAuth (browserless-friendly)
 
