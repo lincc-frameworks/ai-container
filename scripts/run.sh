@@ -19,8 +19,33 @@ if [[ ! -f "${OVERLAY}" ]]; then
   apptainer overlay create --size "${OVERLAY_SIZE_MB}" "${OVERLAY}"
 fi
 
-SHARED_RW_DIR="${RUBIN_CONTAINER_SHARED:-${HOME}/rubin-user/container-shared}"
-mkdir -p "${SHARED_RW_DIR}"
+# Tiered mount policy (single source of truth):
+#   Tier 1 (RW): user-owned work + agent/auth state
+#   Tier 2 (RO): shared Rubin trees
+#   Tier 3 (none): everything else is not mounted unless explicitly added here
+RUBIN_USER_CANONICAL="${RUBIN_USER_CANONICAL:-$(readlink -f "${HOME}/rubin-user" 2>/dev/null || true)}"
+if [[ -z "${RUBIN_USER_CANONICAL}" ]]; then
+  echo "Unable to resolve ${HOME}/rubin-user; refusing to launch." >&2
+  exit 1
+fi
+
+COMMON_RUN_FLAGS=(
+  --cleanenv
+  --no-home
+  --overlay "${OVERLAY}"
+)
+
+RW_BIND_PATHS=(
+  "${RUBIN_USER_CANONICAL}:${HOME}/rubin-user:rw"
+  "${HOME}/.codex:${HOME}/.codex:rw"
+  "${HOME}/.config/claude:${HOME}/.config/claude:rw"
+  "${HOME}/.pi:${HOME}/.pi:rw"
+)
+
+RO_BIND_PATHS=(
+  "/sdf/group/rubin:/sdf/group/rubin:ro"
+  "/sdf/data/rubin:/sdf/data/rubin:ro"
+)
 
 PASS_ENV=(
   OPENAI_API_KEY
@@ -37,48 +62,41 @@ for var in "${PASS_ENV[@]}"; do
   fi
 done
 
-BIND_ARGS=(
-  --bind /sdf/group/rubin:/sdf/group/rubin:ro
-  --bind /sdf/data/rubin:/sdf/data/rubin:ro
-  --bind "${SHARED_RW_DIR}:${SHARED_RW_DIR}:rw"
-)
+BIND_ARGS=()
+for bind_spec in "${RW_BIND_PATHS[@]}" "${RO_BIND_PATHS[@]}"; do
+  src_path="${bind_spec%%:*}"
+  if [[ -e "${src_path}" ]]; then
+    BIND_ARGS+=(--bind "${bind_spec}")
+  fi
+done
 
 if [[ -d "${HOME}/.lsst" ]]; then
   BIND_ARGS+=(--bind "${HOME}/.lsst:${HOME}/.lsst:ro")
 fi
-if [[ -d "${HOME}/.codex" ]]; then
-  BIND_ARGS+=(--bind "${HOME}/.codex:${HOME}/.codex:rw")
-fi
-if [[ -d "${HOME}/.config/claude" ]]; then
-  BIND_ARGS+=(--bind "${HOME}/.config/claude:${HOME}/.config/claude:rw")
-fi
-if [[ -d "${HOME}/.pi" ]]; then
-  BIND_ARGS+=(--bind "${HOME}/.pi:${HOME}/.pi:rw")
-fi
+
+APPTAINER_BASE_CMD=(
+  apptainer
+  exec
+  "${COMMON_RUN_FLAGS[@]}"
+  "${BIND_ARGS[@]}"
+  "${ENV_ARGS[@]}"
+  "${IMAGE}"
+)
+APPTAINER_SHELL_CMD=(
+  apptainer
+  shell
+  "${COMMON_RUN_FLAGS[@]}"
+  "${BIND_ARGS[@]}"
+  "${ENV_ARGS[@]}"
+  "${IMAGE}"
+)
 
 if [[ $# -gt 0 ]]; then
-  exec apptainer exec \
-    --cleanenv \
-    --overlay "${OVERLAY}" \
-    "${BIND_ARGS[@]}" \
-    "${ENV_ARGS[@]}" \
-    "${IMAGE}" \
-    /opt/container/entrypoint.sh "$@"
+  exec "${APPTAINER_BASE_CMD[@]}" /opt/container/entrypoint.sh "$@"
 else
   if [[ "${RUBIN_RAW_SHELL:-0}" == "1" ]]; then
-    exec apptainer shell \
-      --cleanenv \
-      --overlay "${OVERLAY}" \
-      "${BIND_ARGS[@]}" \
-      "${ENV_ARGS[@]}" \
-      "${IMAGE}"
+    exec "${APPTAINER_SHELL_CMD[@]}"
   fi
 
-  exec apptainer exec \
-    --cleanenv \
-    --overlay "${OVERLAY}" \
-    "${BIND_ARGS[@]}" \
-    "${ENV_ARGS[@]}" \
-    "${IMAGE}" \
-    /opt/container/entrypoint.sh
+  exec "${APPTAINER_BASE_CMD[@]}" /opt/container/entrypoint.sh
 fi
