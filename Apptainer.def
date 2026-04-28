@@ -1,0 +1,59 @@
+Bootstrap: docker
+From: rockylinux:8
+
+%labels
+    Author butler-mirror-experiments
+    Description "USDF-friendly AI + LSST apptainer with RO Rubin mounts and writable overlay"
+
+%files
+    container/butler_env_setup.sh /opt/container/butler_env_setup.sh
+    container/requirements.txt /opt/container/requirements.txt
+    container/scripts/entrypoint.sh /opt/container/entrypoint.sh
+    container/scripts/codex-oauth.sh /usr/local/bin/codex-oauth
+
+%post
+    set -euxo pipefail
+
+    dnf -yq update
+    dnf -yq install \
+        bash ca-certificates curl findutils git gzip make shadow-utils tar which \
+        bzip2 xz unzip procps-ng
+
+    # Node.js (for codex, claude-code, pi CLIs)
+    dnf -yq module enable nodejs:20
+    dnf -yq install nodejs
+
+    # Micromamba + Python 3.11 env.
+    # Prefer GitHub release binary (more reliable on USDF networking), with
+    # fallback to micro.mamba.pm tarball endpoint.
+    if ! curl -LfsS https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-linux-64 -o /usr/local/bin/micromamba; then
+      curl -LfsS https://micro.mamba.pm/api/micromamba/linux-64/latest \
+        | tar -xvj -C /usr/local/bin --strip-components=1 bin/micromamba
+    fi
+    chmod +x /usr/local/bin/micromamba
+
+    mkdir -p /opt/micromamba /opt/conda/envs
+    /usr/local/bin/micromamba create -q -y -p /opt/conda/envs/py311 -c conda-forge python=3.11 pip
+    /opt/conda/envs/py311/bin/pip install -q --no-cache-dir -r /opt/container/requirements.txt
+
+    # Install coding CLIs into the image at build time for fast shell entry.
+    npm install -gq @openai/codex
+    npm install -gq @anthropic-ai/claude-code
+    npm install -gq @mariozechner/pi-coding-agent
+
+    chmod +x /opt/container/entrypoint.sh /usr/local/bin/codex-oauth /opt/container/butler_env_setup.sh
+
+%environment
+    export PATH="/opt/conda/envs/py311/bin:$PATH"
+    export MAMBA_ROOT_PREFIX="/opt/micromamba"
+    export PYTHONNOUSERSITE=0
+
+    # Default Rubin stack behavior; can be overridden by caller.
+    export BUTLER_STACK_VERSION="${BUTLER_STACK_VERSION:-w_latest}"
+    export BUTLER_SETUP_PACKAGE="${BUTLER_SETUP_PACKAGE:-lsst_distrib}"
+
+%runscript
+    exec /opt/container/entrypoint.sh "$@"
+
+%startscript
+    exec /opt/container/entrypoint.sh "$@"

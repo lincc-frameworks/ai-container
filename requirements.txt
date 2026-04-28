@@ -1,0 +1,4 @@
+# Preload Python packages into the container's default micromamba env (py311).
+# Keep this list small; users can install extra packages interactively via pip.
+ipython
+jupyterlab
