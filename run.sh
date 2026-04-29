@@ -56,6 +56,7 @@ RO_BIND_PATHS=(
 # from inside the container cannot affect other users.
   "/sdf/group/rubin:/sdf/group/rubin:ro"
   "/sdf/data/rubin:/sdf/data/rubin:ro"
+  "/sdf/scratch/rubin:/sdf/scratch/rubin:ro"
 # WARNING: do not add your ssh config or credential directory to this list
 # it enables a container escape via "ssh localhost"
 )
