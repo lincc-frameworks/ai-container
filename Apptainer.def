@@ -6,10 +6,10 @@ From: rockylinux:8
     Description "USDF-friendly AI + LSST apptainer with RO Rubin mounts and writable overlay"
 
 %files
-    container/butler_env_setup.sh /opt/container/butler_env_setup.sh
-    container/requirements.txt /opt/container/requirements.txt
-    container/scripts/entrypoint.sh /opt/container/entrypoint.sh
-    container/scripts/codex-oauth.sh /usr/local/bin/codex-oauth
+    ./container-scripts/lsst_env_setup.sh /opt/container/lsst_env_setup.sh
+    ./container-scripts/requirements.txt /opt/container/requirements.txt
+    ./container-scripts/entrypoint.sh /opt/container/entrypoint.sh
+    ./container-scripts/codex-oauth.sh /usr/local/bin/codex-oauth
 
 %post
     set -euxo pipefail
@@ -41,7 +41,7 @@ From: rockylinux:8
     npm install -gq @anthropic-ai/claude-code
     npm install -gq @mariozechner/pi-coding-agent
 
-    chmod +x /opt/container/entrypoint.sh /usr/local/bin/codex-oauth /opt/container/butler_env_setup.sh
+    chmod +x /opt/container/entrypoint.sh /usr/local/bin/codex-oauth /opt/container/lsst_env_setup.sh
 
 %environment
     export PATH="/opt/conda/envs/py311/bin:$PATH"
@@ -49,8 +49,8 @@ From: rockylinux:8
     export PYTHONNOUSERSITE=0
 
     # Default Rubin stack behavior; can be overridden by caller.
-    export BUTLER_STACK_VERSION="${BUTLER_STACK_VERSION:-w_latest}"
-    export BUTLER_SETUP_PACKAGE="${BUTLER_SETUP_PACKAGE:-lsst_distrib}"
+    export LSST_STACK_VERSION="${LSST_STACK_VERSION:-w_latest}"
+    export LSST_SETUP_PACKAGE="${LSST_SETUP_PACKAGE:-lsst_distrib}"
 
 %runscript
     exec /opt/container/entrypoint.sh "$@"

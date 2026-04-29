@@ -5,9 +5,9 @@ export PATH="/opt/conda/envs/py311/bin:${PATH}"
 
 # Intentionally use the simple/slow path for correctness:
 # always source Butler/LSST setup at container startup.
-if [[ -r /opt/container/butler_env_setup.sh ]]; then
+if [[ -r /opt/container/lsst_env_setup.sh ]]; then
   # shellcheck disable=SC1091
-  source /opt/container/butler_env_setup.sh || true
+  source /opt/container/lsst_env_setup.sh || true
 fi
 
 if [[ $# -eq 0 ]]; then
